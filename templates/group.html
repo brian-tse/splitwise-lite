@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h3>{{ group_name }}</h3>
+
+<div class="mb-3">
+  <label class="form-label">Shareable Link</label>
+  <div class="input-group">
+    <input type="text" id="shareLink" class="form-control" value="{{ request.url }}" readonly>
+    <button class="btn btn-outline-secondary" type="button" onclick="copyShareLink()">Copy</button>
+  </div>
+</div>
+
+<script>
+  function copyShareLink() {
+    const link = document.getElementById("shareLink");
+    link.select();
+    link.setSelectionRange(0, 99999);
+    document.execCommand("copy");
+    alert("Link copied!");
+  }
+</script>
+
+<!-- EXPENSE LIST -->
+<h5 class="mt-4">Expenses</h5>
+<ul class="list-group mb-3">
+  {% for exp in expenses %}
+    <li class="list-group-item d-flex justify-content-between align-items-start">
+      <div>
+        <strong>{{ exp[1] }}</strong> paid <strong>${{ '%.2f' % exp[2] }}</strong> for "{{ exp[3] }}"
+        <br><small>Split between: {{ exp[4] }}</small>
+      </div>
+      <div>
+        <form action="/delete_expense/{{ exp[0] }}" method="POST" style="display:inline;">
+          <input type="hidden" name="group_id" value="{{ group_id }}">
+          <button class="btn btn-sm btn-danger">🗑</button>
+        </form>
+        <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editExpenseModal{{ exp[0] }}">✏️</button>
+      </div>
+    </li>
+
+    <!-- EDIT EXPENSE MODAL -->
+    <div class="modal fade" id="editExpenseModal{{ exp[0] }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <form method="POST" action="/edit_expense/{{ exp[0] }}">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Edit Expense</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" name="group_id" value="{{ group_id }}">
+              <div class="mb-2">
+                <label>Payer:</label>
+                <select name="payer" class="form-select" required>
+                  {% for member in members %}
+                    <option value="{{ member }}" {% if member == exp[1] %}selected{% endif %}>{{ member }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-2">
+                <input class="form-control" type="number" name="amount" step="0.01" value="{{ exp[2] }}" required>
+              </div>
+              <div class="mb-2">
+                <input class="form-control" type="text" name="description" value="{{ exp[3] }}" required>
+              </div>
+              <label>Split Between:</label>
+              {% set selected = exp[4].split(',') %}
+              {% for member in members %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="split_between" value="{{ member }}" id="edit-split-{{ exp[0] }}-{{ loop.index }}" {% if member in selected %}checked{% endif %}>
+                  <label class="form-check-label" for="edit-split-{{ exp[0] }}-{{ loop.index }}">{{ member }}</label>
+                </div>
+              {% endfor %}
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-primary">Save changes</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+</ul>
+
+<!-- ADD EXPENSE FORM -->
+<form method="POST" action="/add_expense/{{ group_id }}" class="mb-4">
+  <h5>Add Expense</h5>
+  <div class="mb-2">
+    <label>Payer</label>
+    <select name="payer" class="form-select" required>
+      {% for member in members %}
+        <option value="{{ member }}">{{ member }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mb-2">
+    <input type="number" class="form-control" name="amount" placeholder="Amount" step="0.01" required>
+  </div>
+  <div class="mb-2">
+    <input type="text" class="form-control" name="description" placeholder="Description" required>
+  </div>
+  <div class="mb-2">
+    <label>Split between:</label><br>
+    <div class="form-check">
+      <input type="checkbox" id="selectAll" class="form-check-input">
+      <label class="form-check-label" for="selectAll">Select All</label>
+    </div>
+    {% for member in members %}
+      <div class="form-check">
+        <input class="form-check-input split-checkbox" type="checkbox" name="split_between" value="{{ member }}" id="member-{{ loop.index }}">
+        <label class="form-check-label" for="member-{{ loop.index }}">{{ member }}</label>
+      </div>
+    {% endfor %}
+  </div>
+  <button class="btn btn-success">Add Expense</button>
+</form>
+
+<!-- BALANCES -->
+<h5 class="mt-4">Balances</h5>
+<ul class="list-group mb-3">
+  {% for person, balance in balances.items() %}
+    <li class="list-group-item">
+      {{ person }}:
+      {% if balance < 0 %}
+        owes ${{ -balance }}
+      {% elif balance > 0 %}
+        is owed ${{ balance }}
+      {% else %}
+        is settled
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>
+
+<!-- SETTLE-UP SUGGESTIONS -->
+<h5>Settle-Up Suggestions</h5>
+<ul class="list-group mb-4">
+  {% for suggestion in suggestions %}
+    <li class="list-group-item">{{ suggestion }}</li>
+  {% endfor %}
+  {% if suggestions|length == 0 %}
+    <li class="list-group-item">Everyone is settled!</li>
+  {% endif %}
+</ul>
+
+<!-- PAYMENTS LIST -->
+<h5 class="mt-4">Payments</h5>
+<ul class="list-group mb-3">
+  {% for pay in payments %}
+    <li class="list-group-item d-flex justify-content-between align-items-start">
+      <div>
+        <strong>{{ pay[1] }}</strong> paid <strong>{{ pay[3] }}</strong> to <strong>{{ pay[2] }}</strong>
+      </div>
+      <div>
+        <form action="/delete_payment/{{ pay[0] }}" method="POST" style="display:inline;">
+          <input type="hidden" name="group_id" value="{{ group_id }}">
+          <button class="btn btn-sm btn-danger">🗑</button>
+        </form>
+        <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editPaymentModal{{ pay[0] }}">✏️</button>
+      </div>
+    </li>
+
+    <!-- EDIT PAYMENT MODAL -->
+    <div class="modal fade" id="editPaymentModal{{ pay[0] }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <form method="POST" action="/edit_payment/{{ pay[0] }}">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Edit Payment</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" name="group_id" value="{{ group_id }}">
+              <div class="mb-2">
+                <label>Payer</label>
+                <select name="payer" class="form-select">
+                  {% for member in members %}
+                    <option value="{{ member }}" {% if member == pay[1] %}selected{% endif %}>{{ member }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-2">
+                <label>Payee</label>
+                <select name="payee" class="form-select">
+                  {% for member in members %}
+                    <option value="{{ member }}" {% if member == pay[2] %}selected{% endif %}>{{ member }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-2">
+                <label>Amount</label>
+                <input type="number" step="0.01" class="form-control" name="amount" value="{{ pay[3] }}">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-primary">Save changes</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+</ul>
+
+<!-- ADD PAYMENT FORM -->
+<form method="POST" action="/record_payment/{{ group_id }}">
+  <h5>Record Payment</h5>
+  <div class="row mb-2">
+    <div class="col">
+      <label>Payer</label>
+      <select name="payer" class="form-select" required>
+        {% for member in members %}
+          <option value="{{ member }}">{{ member }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col">
+      <label>Payee</label>
+      <select name="payee" class="form-select" required>
+        {% for member in members %}
+          <option value="{{ member }}">{{ member }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col">
+      <label>Amount</label>
+      <input type="number" class="form-control" name="amount" step="0.01" required>
+    </div>
+  </div>
+  <button class="btn btn-secondary">Record Payment</button>
+</form>
+
+<p class="mt-4"><a href="/">← Back to groups</a></p>
+
+<script>
+  const selectAll = document.getElementById("selectAll");
+  const checkboxes = document.querySelectorAll(".split-checkbox");
+
+  selectAll.addEventListener("change", function () {
+    checkboxes.forEach(cb => cb.checked = this.checked);
+  });
+</script>
+{% endblock %}
