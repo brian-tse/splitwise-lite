@@ -67,6 +67,10 @@ def calculate_balances(expenses, payments):
     for expense in expenses:
         _, payer, amount, _, split_between = expense
         people = [name.strip() for name in split_between.split(',') if name.strip()]
+        if not people:
+            # If the expense does not specify anyone to split between,
+            # assume it is only for the payer to avoid division by zero
+            people = [payer]
         split_amount = amount / len(people)
         paid[payer] += amount
         for person in people:
